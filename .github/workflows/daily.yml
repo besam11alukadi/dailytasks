@@ -1,0 +1,105 @@
+name: Smart Daily Activity
+
+on:
+  schedule:
+    - cron: "0 */4 * * *"   # يعمل كل 4 ساعات (6 مرات يومياً)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  smart-activity:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 📥 تحميل المستودع
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          fetch-depth: 0
+
+      # 🧠 إنشاء النشاط الذكي
+      - name: Generate smart activity log
+        run: |
+          set -e
+
+          PROJECT="${GITHUB_REPOSITORY##*/}"
+          DAY="$(date -u +%A)"
+          WEEK="$(date -u +%V)"
+          DATE="$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+
+          FILE="activity-week-${WEEK}.log"
+          COUNTER_FILE=".run-counter"
+
+          # 🔢 عداد التشغيل
+          if [ ! -f "$COUNTER_FILE" ]; then
+            echo "0" > "$COUNTER_FILE"
+          fi
+
+          RUN_COUNT=$(($(cat "$COUNTER_FILE") + 1))
+          echo "$RUN_COUNT" > "$COUNTER_FILE"
+
+          # 📊 حساب عدد commits
+          COMMITS=$(git rev-list --count HEAD || echo 0)
+
+          if [ "$COMMITS" -lt 20 ]; then
+            STATUS="Early Development"
+            TAG="research"
+          elif [ "$COMMITS" -lt 100 ]; then
+            STATUS="Active Development"
+            TAG="dev"
+          else
+            STATUS="Stabilization & Cleanup"
+            TAG="cleanup"
+          fi
+
+          # 📅 ملخص أسبوعي يوم الأحد
+          SUMMARY=""
+          if [ "$DAY" = "Sunday" ]; then
+            WEEK_COMMITS=$(git rev-list --count --since="7 days ago" HEAD || echo 0)
+            SUMMARY="Weekly commits: $WEEK_COMMITS"
+          fi
+
+          # 🔐 إنشاء hash
+          SIGN_DATA="$PROJECT|$STATUS|$RUN_COUNT|$DATE"
+          HASH=$(echo "$SIGN_DATA" | sha256sum | cut -d' ' -f1)
+
+          # 📝 كتابة log
+          {
+            echo ""
+            echo "████████████████████████████████████"
+            echo "█   SMART ACTIVITY SYSTEM v2.0     █"
+            echo "████████████████████████████████████"
+            echo " Project : $PROJECT"
+            echo " Status  : $STATUS"
+            echo " Tag     : #$TAG"
+            echo " Commits : $COMMITS"
+            echo " Run     : #$RUN_COUNT"
+            echo " Day     : $DAY"
+            echo " Week    : #$WEEK"
+            echo " Time    : $DATE"
+            [ -n "$SUMMARY" ] && echo " Summary : $SUMMARY"
+            echo " Hash    : $HASH"
+            echo " User    : besam11alukadi"
+            echo "████████████████████████████████████"
+          } >> "$FILE"
+
+      # 🚀 عمل commit و push تلقائي
+      - name: Commit & push changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "besam11alukadi"
+          git config user.email "190636572+besam11alukadi@users.noreply.github.com"
+
+          git add .
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+
+          git commit -m "chore: smart automated activity 🤖"
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" HEAD:main
